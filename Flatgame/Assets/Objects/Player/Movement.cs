@@ -18,6 +18,9 @@ public class Movement : MonoBehaviour
     bool skidding;
     int nextAttack = 0;
 
+    bool bigZoom;
+    bool triBreaks;
+
     // Components
     Rigidbody2D c_rb;
     Animator c_anim;
@@ -25,6 +28,11 @@ public class Movement : MonoBehaviour
     Camera c_cam;
 
     [SerializeField] ParticleSystem PS_skid;
+    [SerializeField] ParticleSystem PS_Spike;
+    [SerializeField] GameObject PS_BigSpike;
+    [SerializeField] ParticleSystem PS_HitParticlesBAD;
+    [SerializeField] GameObject PS_PostitTri;
+    [SerializeField] ParticleSystem PS_PostitBreak;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -52,6 +60,14 @@ public class Movement : MonoBehaviour
         AnimationUpdate();
     }
 
+    private void Update()
+    {
+        if (!attacking)
+        {
+            c_cam.transform.position = transform.position + Vector3.forward * -10;
+        }
+    }
+
     void AnimationUpdate()
     {
         c_anim.SetBool("Still", Mathf.Abs(c_rb.linearVelocity.magnitude) < 0.1);
@@ -66,7 +82,7 @@ public class Movement : MonoBehaviour
             PS_skid.Stop();
             transform.eulerAngles = moveDirection.x > 0 ? Vector3.zero : Vector3.up * 180;
         }
-        else if(PS_skid.isEmitting)
+        else if(!PS_skid.isEmitting)
         {
             PS_skid.Play();
         }
@@ -93,12 +109,6 @@ public class Movement : MonoBehaviour
     {
         if (collision.gameObject.CompareTag("Enemy") && attacking == false)
         {
-            c_anim.SetTrigger("Attack" + nextAttack);
-
-            nextAttack++;
-            if(nextAttack > 2)
-                nextAttack = 0;
-
             attacking = true;
             StartCoroutine(AttackSequence(collision));
         }
@@ -106,20 +116,73 @@ public class Movement : MonoBehaviour
 
     IEnumerator AttackSequence(Collision2D collision)
     {
+        c_anim.SetTrigger("Attack" + nextAttack);
+
+        nextAttack++;
+        if (nextAttack > 2)
+            nextAttack = 0;
+        Vector2 enemyDirection = collision.transform.position - transform.position;
+        var IndexPoint = transform.position + (Vector3)(enemyDirection / 2);
+        var dir = collision.transform.position - transform.position;
+        var angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+
+        print(angle);
+
+
+        // PS SET UP FOR BIG ZOOM
+        PS_Spike.transform.position = transform.position + (Vector3)(enemyDirection / 2);
+        //bigZoom = true;
+        PS_Spike.gameObject.SetActive(true);
+        PS_PostitTri.gameObject.SetActive(true);
+        PS_PostitTri.transform.position = IndexPoint;
+        PS_PostitTri.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+
         c_cam.fieldOfView = 15f; // BIG ZOOM IN
         c_tf.FreezeTime(1f, 0);
         yield return new WaitForSecondsRealtime(1f);
 
+        // CAMERASET UP FOR ZOOM OUT
+        c_cam.fieldOfView = 40f; // BIG ZOOM OUT (SHOW COOL VISUAL)
+        c_cam.transform.position = transform.position + Vector3.forward * -10 + ((Vector3)(enemyDirection * 3) + Vector3.back * 10);
 
-        c_cam.fieldOfView = 50f; // BIG ZOOM OUT (SHOW COOL VISUAL)
-        Vector2 enemyDirection = collision.transform.position - transform.position;
-        c_cam.transform.position = (Vector3)(enemyDirection * 5) + Vector3.back * 10;
+        c_tf.FreezeTime(1f, 0);
+        //POSTIT TRI BREAKS
+        yield return new WaitForSecondsRealtime(1f);
+        PS_PostitTri.gameObject.SetActive(false);
+        //bigZoom = false;
+        //triBreaks = true;
+        PS_PostitBreak.transform.position = IndexPoint;
+        PS_PostitBreak.gameObject.SetActive(true);
+        PS_PostitBreak.Play();
+        PS_PostitBreak.transform.rotation = Quaternion.AngleAxis(angle - 45, Vector3.forward);
+        PS_BigSpike.transform.position = IndexPoint;
+        PS_BigSpike.transform.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
+        PS_BigSpike.gameObject.SetActive(true);
 
         c_tf.FreezeTime(1f, 0);
         yield return new WaitForSecondsRealtime(1f);
 
+        PS_HitParticlesBAD.transform.position = IndexPoint;
+
+        PS_HitParticlesBAD.transform.rotation = Quaternion.AngleAxis(angle-45, Vector3.forward);
+
+        
+        PS_HitParticlesBAD.gameObject.SetActive(true);
+        PS_HitParticlesBAD.Play();
+
+        c_tf.FreezeTime(2f, 0);
+        yield return new WaitForSecondsRealtime(2f);
+
+        //triBreaks = false;
         c_anim.SetTrigger("AttackEnd");
         c_cam.fieldOfView = 30f; // base
-        c_cam.transform.position = Vector3.back * 10;
+        c_cam.transform.position = transform.position + Vector3.forward * -10;
+        PS_Spike.Stop();
+        PS_HitParticlesBAD.Stop();
+        PS_PostitBreak.gameObject.SetActive(false);
+        PS_BigSpike.gameObject.SetActive(false);
+        PS_HitParticlesBAD.gameObject.SetActive(false);
+        PS_Spike.gameObject.SetActive(false);
+        attacking = false;
     }
 }
