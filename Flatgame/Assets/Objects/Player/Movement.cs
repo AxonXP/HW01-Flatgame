@@ -1,7 +1,9 @@
 using System.Collections;
 using Unity.Cinemachine;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using static UnityEngine.Rendering.DebugUI;
 
 public class Movement : MonoBehaviour
 {
@@ -21,11 +23,19 @@ public class Movement : MonoBehaviour
     bool bigZoom;
     bool triBreaks;
 
+    float kills = 0;
+
+    float distanceToEnemy;
+
+    //References
+    GameObject enemy;
+
     // Components
     Rigidbody2D c_rb;
     Animator c_anim;
     TimeFreezer c_tf;
     Camera c_cam;
+    SoundEffectManager c_sfx;
 
     [SerializeField] ParticleSystem PS_skid;
     [SerializeField] ParticleSystem PS_Spike;
@@ -33,6 +43,9 @@ public class Movement : MonoBehaviour
     [SerializeField] ParticleSystem PS_HitParticlesBAD;
     [SerializeField] GameObject PS_PostitTri;
     [SerializeField] ParticleSystem PS_PostitBreak;
+
+    [SerializeField] GameObject baby;
+    [SerializeField] GameObject anger;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
@@ -45,8 +58,12 @@ public class Movement : MonoBehaviour
         c_anim = GetComponent<Animator>();
         c_rb = GetComponent<Rigidbody2D>();
         c_tf = GetComponent<TimeFreezer>();
+        c_sfx = GetComponent<SoundEffectManager>();
 
         c_cam = FindAnyObjectByType<Camera>();
+
+        // Reference Grab
+        enemy = GameObject.FindGameObjectWithTag("Enemy");
     }
 
     public void OnMove(InputValue value) // using send message system
@@ -66,6 +83,19 @@ public class Movement : MonoBehaviour
         {
             c_cam.transform.position = transform.position + Vector3.forward * -10;
         }
+
+        if (enemy != null && !attacking)
+        {
+            float distance = Vector2.Distance(transform.position, enemy.transform.position);
+            if(distance > distanceToEnemy)
+            {
+                distanceToEnemy = distance;
+            }
+            float t = Mathf.InverseLerp(0f, distanceToEnemy, distance);
+            Color newColor = Color.Lerp(Color.red, Color.white, t);
+            c_cam.backgroundColor = newColor;
+            c_cam.fieldOfView = 1/t * 2 + 30;
+        }
     }
 
     void AnimationUpdate()
@@ -79,13 +109,16 @@ public class Movement : MonoBehaviour
 
         if (!skidding)
         {
+            PS_skid.GetComponent<SoundEffectManager>().StopSound("Screech");
             PS_skid.Stop();
             transform.eulerAngles = moveDirection.x > 0 ? Vector3.zero : Vector3.up * 180;
         }
         else if(!PS_skid.isEmitting)
         {
+            PS_skid.GetComponent<SoundEffectManager>().PlaySound("Screech");
             PS_skid.Play();
         }
+        PS_skid.GetComponent<SoundEffectManager>().SetMasterVolume(c_rb.linearVelocity.magnitude);
     }
 
     void MovementUpdate()
@@ -116,6 +149,10 @@ public class Movement : MonoBehaviour
 
     IEnumerator AttackSequence(Collision2D collision)
     {
+        collision.gameObject.GetComponent<AudioSource>().volume = 0;
+        PS_skid.GetComponent<SoundEffectManager>().StopAllSounds();
+        c_sfx.PlayRandShot("PaperNoise");
+        c_sfx.PlayRandShot("Peel");
         c_anim.SetTrigger("Attack" + nextAttack);
 
         nextAttack++;
@@ -140,6 +177,8 @@ public class Movement : MonoBehaviour
         c_cam.fieldOfView = 15f; // BIG ZOOM IN
         c_tf.FreezeTime(1f, 0);
         yield return new WaitForSecondsRealtime(1f);
+        
+        c_sfx.PlayRandShot("PaperTear1");
 
         // CAMERASET UP FOR ZOOM OUT
         c_cam.fieldOfView = 40f; // BIG ZOOM OUT (SHOW COOL VISUAL)
@@ -148,6 +187,9 @@ public class Movement : MonoBehaviour
         c_tf.FreezeTime(1f, 0);
         //POSTIT TRI BREAKS
         yield return new WaitForSecondsRealtime(1f);
+        c_sfx.PlayRandShot("Peel2");
+        c_sfx.PlayRandShot("PaperTear2");
+        c_sfx.PlayRandShot("Crinkle");
         PS_PostitTri.gameObject.SetActive(false);
         //bigZoom = false;
         //triBreaks = true;
@@ -161,6 +203,8 @@ public class Movement : MonoBehaviour
 
         c_tf.FreezeTime(1f, 0);
         yield return new WaitForSecondsRealtime(1f);
+        c_sfx.PlayRandShot("PaperNoise");
+        c_sfx.PlayRandShot("PaperTear3");
 
         PS_HitParticlesBAD.transform.position = IndexPoint;
 
@@ -184,5 +228,27 @@ public class Movement : MonoBehaviour
         PS_HitParticlesBAD.gameObject.SetActive(false);
         PS_Spike.gameObject.SetActive(false);
         attacking = false;
+
+        distanceToEnemy = 0;
+        collision.gameObject.GetComponent<Enemy>().SpawnDeathParticle(angle);
+        kills++;
+
+        if(kills == 1)
+        {
+            Vector2 randomDirection = Random.insideUnitCircle.normalized;
+            Vector3 spawnPosition = transform.position + new Vector3(randomDirection.x, randomDirection.y, 0) * 100;
+
+            enemy = Instantiate(baby, spawnPosition, Quaternion.identity);
+        }
+        else if(kills > 1)
+        {
+            Vector2 randomDirection = Random.insideUnitCircle.normalized;
+            Vector3 spawnPosition = transform.position + new Vector3(randomDirection.x, randomDirection.y, 0) * 100;
+
+            enemy = Instantiate(anger, spawnPosition, Quaternion.identity);
+        }
+        c_cam.backgroundColor = Color.white;
+        c_sfx.StopAllSounds();
+        c_sfx.PlayRandShot("Peel2");
     }
 }
